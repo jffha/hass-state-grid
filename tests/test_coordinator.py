@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.state_grid.api import (
     StateGridApiError,
@@ -14,9 +14,31 @@ from custom_components.state_grid.api import (
     StateGridInteractiveChallengeRequired,
     StateGridNetworkError,
 )
-from custom_components.state_grid.const import CONF_AUTH_ERROR, CONF_LOGIN_SESSION
+from custom_components.state_grid.const import (
+    CONF_AUTH_ERROR,
+    CONF_LOGIN_SESSION,
+    CONF_TOU_STATISTICS,
+)
 from custom_components.state_grid.coordinator import StateGridDataCoordinator
 from custom_components.state_grid.models import LoginSession
+
+
+@pytest.mark.parametrize(
+    ("options", "fields"),
+    [
+        ({}, ("usage", "valley", "flat")),
+        ({CONF_TOU_STATISTICS: []}, ("usage",)),
+        ({CONF_TOU_STATISTICS: ["tip", "peak"]}, ("usage", "peak", "tip")),
+    ],
+)
+def test_coordinator_passes_selected_statistics_to_importer(
+    monkeypatch, options, fields
+):
+    monkeypatch.setattr(DataUpdateCoordinator, "__init__", lambda *args, **kwargs: None)
+    coordinator = StateGridDataCoordinator(
+        Mock(), SimpleNamespace(options=options), Mock()
+    )
+    assert coordinator.statistics.fields == fields
 
 
 def _session(token: str) -> LoginSession:
@@ -38,6 +60,7 @@ def _coordinator(*, saved_session=None, current_session=None, auth_error=None):
     coordinator.api = SimpleNamespace(
         login_session=current_session, async_query_history=AsyncMock(return_value={})
     )
+    coordinator.statistics = SimpleNamespace(async_import=AsyncMock())
     return coordinator, entry, update_entry
 
 
@@ -129,3 +152,29 @@ def test_unchanged_success_does_not_write_entry() -> None:
     asyncio.run(coordinator._async_update_data())
 
     update_entry.assert_not_called()
+
+
+def test_success_imports_history_before_publishing_sensor_values() -> None:
+    coordinator, entry, _ = _coordinator()
+    entry.options["history_months"] = 1
+    result = {"account": Mock()}
+    coordinator.api.async_query_history.return_value = result
+
+    assert asyncio.run(coordinator._async_update_data()) == result
+
+    coordinator.api.async_query_history.assert_awaited_once_with(months=2)
+    coordinator.statistics.async_import.assert_awaited_once_with(result)
+
+
+def test_statistics_failure_keeps_sensors_and_new_login_available(caplog) -> None:
+    session = _session("valid")
+    coordinator, entry, _ = _coordinator(current_session=session)
+    result = {"account": Mock()}
+    coordinator.api.async_query_history.return_value = result
+    coordinator.statistics.async_import.side_effect = OSError("Recorder unavailable")
+
+    assert asyncio.run(coordinator._async_update_data()) == result
+
+    assert "Unable to import historical energy statistics" in caplog.text
+    assert entry.data[CONF_LOGIN_SESSION] == session.as_dict()
+    assert CONF_AUTH_ERROR not in entry.data

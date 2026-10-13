@@ -49,10 +49,22 @@
     "step": {
       "init": {
         "title": "State Grid query settings",
+        "description": "Total consumption is always recorded. Choose additional time-of-use statistics. Deselecting a period stops its updates and keeps imported history.",
         "data": {
           "history_months": "History months (1-3)",
-          "update_interval_hours": "Update interval (6-24 hours)"
+          "update_interval_hours": "Update interval (6-24 hours)",
+          "tou_statistics": "Enabled time-of-use statistics"
         }
+      }
+    }
+  },
+  "selector": {
+    "tou_statistics": {
+      "options": {
+        "valley": "Valley",
+        "flat": "Flat",
+        "peak": "Peak",
+        "tip": "Tip"
       }
     }
   },

@@ -26,8 +26,10 @@ from .const import (
     DEFAULT_HISTORY_MONTHS,
     DEFAULT_UPDATE_INTERVAL_HOURS,
     DOMAIN,
+    enabled_tou_statistics,
 )
 from .models import AccountUsage
+from .statistics import EnergyStatisticsImporter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +55,9 @@ class StateGridDataCoordinator(DataUpdateCoordinator[dict[str, AccountUsage]]):
     ) -> None:
         self.entry = entry
         self.api = api
+        self.statistics = EnergyStatisticsImporter(
+            hass, tou_statistics=enabled_tou_statistics(entry.options)
+        )
         self.configured_options = dict(entry.options)
         hours = int(
             entry.options.get(CONF_UPDATE_INTERVAL_HOURS, DEFAULT_UPDATE_INTERVAL_HOURS)
@@ -65,8 +70,10 @@ class StateGridDataCoordinator(DataUpdateCoordinator[dict[str, AccountUsage]]):
         )
 
     async def _async_update_data(self) -> dict[str, AccountUsage]:
-        months = int(
-            self.entry.options.get(CONF_HISTORY_MONTHS, DEFAULT_HISTORY_MONTHS)
+        # Always include the previous month so late month-end readings can be
+        # backfilled after a rollover, even with the legacy one-month option.
+        months = max(
+            2, int(self.entry.options.get(CONF_HISTORY_MONTHS, DEFAULT_HISTORY_MONTHS))
         )
         auth_error: str | None = None
         succeeded = False
@@ -79,6 +86,10 @@ class StateGridDataCoordinator(DataUpdateCoordinator[dict[str, AccountUsage]]):
             raise UpdateFailed(str(error)) from error
         else:
             succeeded = True
+            try:
+                await self.statistics.async_import(result)
+            except Exception:  # Keep ordinary sensors usable if Recorder fails.
+                _LOGGER.exception("Unable to import historical energy statistics")
             return result
         finally:
             # Login can succeed before an electricity query fails. Persist the

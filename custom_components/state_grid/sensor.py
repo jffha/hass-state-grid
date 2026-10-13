@@ -20,9 +20,10 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, enabled_tou_statistics
 from .coordinator import StateGridDataCoordinator, StateGridRuntimeData
 from .models import AccountUsage
+from .statistics import energy_statistic_id
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -195,6 +196,13 @@ class StateGridElectricitySensor(
             "account_suffix": account.cons_no_src[-4:],
             "address": account.address,
         }
+        if self.entity_description.key == "current_month_usage":
+            attributes["energy_statistic_id"] = energy_statistic_id(account)
+            attributes["energy_statistic_ids"] = {
+                field: energy_statistic_id(account, field)
+                for field in ("usage",)
+                + enabled_tou_statistics(self.coordinator.entry.options)
+            }
         if self.entity_description.key == "latest_daily_usage":
             attributes["latest_date"] = (
                 self.usage.latest.day.isoformat() if self.usage.latest else None

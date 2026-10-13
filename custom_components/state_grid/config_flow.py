@@ -26,10 +26,13 @@ from .const import (
     CONF_HISTORY_MONTHS,
     CONF_LOGIN_SESSION,
     CONF_SYNTHETIC_DEVICE,
+    CONF_TOU_STATISTICS,
     CONF_UPDATE_INTERVAL_HOURS,
     DEFAULT_HISTORY_MONTHS,
     DEFAULT_UPDATE_INTERVAL_HOURS,
     DOMAIN,
+    TOU_STATISTICS,
+    enabled_tou_statistics,
 )
 from .models import DeviceProfile
 from .synthetic_device import build_device_profile, create_device_state
@@ -521,7 +524,7 @@ class StateGridConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class StateGridOptionsFlow(config_entries.OptionsFlow):
-    """Configure polling and history depth."""
+    """Configure polling, history depth and additional time-of-use statistics."""
 
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
         self.entry = entry
@@ -546,6 +549,17 @@ class StateGridOptionsFlow(config_entries.OptionsFlow):
                             DEFAULT_UPDATE_INTERVAL_HOURS,
                         ),
                     ): vol.All(vol.Coerce(int), vol.Range(min=6, max=24)),
+                    vol.Required(
+                        CONF_TOU_STATISTICS,
+                        default=list(enabled_tou_statistics(self.entry.options)),
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=list(TOU_STATISTICS),
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.LIST,
+                            translation_key=CONF_TOU_STATISTICS,
+                        )
+                    ),
                 }
             ),
         )

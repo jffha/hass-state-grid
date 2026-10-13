@@ -4,6 +4,8 @@ import asyncio
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
+import voluptuous as vol
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResultType
 from test_api_transport import FakeHttp, _profile, _response_envelope
@@ -13,8 +15,42 @@ from custom_components.state_grid.api import (
     StateGridApiError,
     StateGridDeviceVerificationRequired,
 )
-from custom_components.state_grid.config_flow import StateGridConfigFlow
-from custom_components.state_grid.const import CONF_AUTH_ERROR, CONF_SYNTHETIC_DEVICE
+from custom_components.state_grid.config_flow import (
+    StateGridConfigFlow,
+    StateGridOptionsFlow,
+)
+from custom_components.state_grid.const import (
+    CONF_AUTH_ERROR,
+    CONF_SYNTHETIC_DEVICE,
+    CONF_TOU_STATISTICS,
+    TOU_STATISTICS,
+)
+
+
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        ({}, ["valley", "flat"]),
+        ({"history_months": 3}, ["valley", "flat"]),
+        ({CONF_TOU_STATISTICS: []}, []),
+        ({CONF_TOU_STATISTICS: ["tip", "peak", "peak"]}, ["peak", "tip"]),
+    ],
+)
+def test_options_preserve_selection_and_default_to_valley_flat(options, expected):
+    flow = StateGridOptionsFlow(SimpleNamespace(options=options))
+    result = asyncio.run(flow.async_step_init())
+    schema = result["data_schema"]
+    assert schema({})[CONF_TOU_STATISTICS] == expected
+    assert schema({CONF_TOU_STATISTICS: []})[CONF_TOU_STATISTICS] == []
+    assert schema({CONF_TOU_STATISTICS: list(TOU_STATISTICS)})[
+        CONF_TOU_STATISTICS
+    ] == list(TOU_STATISTICS)
+    with pytest.raises(vol.Invalid):
+        schema({CONF_TOU_STATISTICS: ["other"]})
+    saved = schema({CONF_TOU_STATISTICS: expected})
+    result = asyncio.run(flow.async_step_init(saved))
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == saved
 
 
 def test_initial_form_contains_only_username_and_password() -> None:

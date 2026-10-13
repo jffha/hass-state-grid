@@ -5,10 +5,12 @@ import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, sentinel
 
+import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
 from custom_components.state_grid.const import (
     CONF_SYNTHETIC_DEVICE,
+    CONF_TOU_STATISTICS,
     CONF_UPDATE_INTERVAL_HOURS,
     DOMAIN,
     PLATFORMS,
@@ -85,7 +87,17 @@ def test_setup_passes_profile_provider_and_persists_each_new_cache(monkeypatch) 
     assert entry.data[CONF_USERNAME] == "test-user"
 
 
-def test_internal_state_updates_do_not_reload_but_options_changes_do() -> None:
+@pytest.mark.parametrize(
+    "new_options",
+    [
+        {CONF_UPDATE_INTERVAL_HOURS: 6},
+        {CONF_UPDATE_INTERVAL_HOURS: 12, CONF_TOU_STATISTICS: []},
+        {CONF_UPDATE_INTERVAL_HOURS: 12, CONF_TOU_STATISTICS: ["peak", "tip"]},
+    ],
+)
+def test_internal_state_updates_do_not_reload_but_options_changes_do(
+    new_options,
+) -> None:
     entry = SimpleNamespace(
         entry_id="test-entry",
         options={CONF_UPDATE_INTERVAL_HOURS: 12},
@@ -100,7 +112,7 @@ def test_internal_state_updates_do_not_reload_but_options_changes_do() -> None:
     async def run():
         await setup._async_reload_entry(hass, entry)
         hass.config_entries.async_reload.assert_not_awaited()
-        entry.options = {CONF_UPDATE_INTERVAL_HOURS: 6}
+        entry.options = new_options
         await setup._async_reload_entry(hass, entry)
         await setup._async_reload_entry(hass, entry)
 

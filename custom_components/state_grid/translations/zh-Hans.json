@@ -49,10 +49,22 @@
     "step": {
       "init": {
         "title": "国家电网查询设置",
+        "description": "总电量始终统计；可额外启用分时电量统计。取消勾选后停止更新该时段，已导入的历史保留。",
         "data": {
           "history_months": "查询最近几个月（1-3）",
-          "update_interval_hours": "更新间隔（6-24 小时）"
+          "update_interval_hours": "更新间隔（6-24 小时）",
+          "tou_statistics": "启用的分时统计"
         }
+      }
+    }
+  },
+  "selector": {
+    "tou_statistics": {
+      "options": {
+        "valley": "谷段 (valley)",
+        "flat": "平段 (flat)",
+        "peak": "峰段 (peak)",
+        "tip": "尖段 (tip)"
       }
     }
   },
